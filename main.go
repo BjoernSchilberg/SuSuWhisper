@@ -13,9 +13,10 @@ import (
 )
 
 type Article struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Content string `json:"content"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 var (
@@ -72,9 +73,10 @@ func createArticleHandler(w http.ResponseWriter, r *http.Request) {
 		title := r.FormValue("title")
 		content := r.FormValue("content")
 		article := Article{
-			ID:      generateID(),
-			Title:   title,
-			Content: content,
+			ID:        generateID(),
+			Title:     title,
+			Content:   content,
+			CreatedAt: time.Now(),
 		}
 
 		mutex.Lock()
@@ -101,7 +103,15 @@ func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpl, _ := template.ParseFiles("article.html")
+	// Create a template function map with a formatDate function
+	funcMap := template.FuncMap{
+		"formatDate": func(t time.Time) string {
+			return t.Format("January 2, 2006 at 15:04")
+		},
+	}
+
+	// Parse the template with the function map
+	tmpl, _ := template.New("article.html").Funcs(funcMap).ParseFiles("article.html")
 	tmpl.Execute(w, article)
 }
 
