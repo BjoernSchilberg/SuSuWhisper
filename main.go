@@ -22,7 +22,7 @@ type Article struct {
 var (
 	articles = make(map[string]Article)
 	mutex    = &sync.Mutex{}
-	filePath = "articles.json"
+	filePath = "data/articles.json"
 )
 
 func generateID() string {
