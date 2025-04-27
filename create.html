@@ -8,6 +8,8 @@
   <!-- TinyMCE einbinden -->
   <script src="tinymce/js/tinymce/tinymce.min.js"></script>
   <script>
+    // ID aus Server übernehmen
+    let currentArticleID = "{{.ID}}";
 
     tinymce.init({
       selector: 'textarea[name="content"]',
@@ -15,15 +17,15 @@
       language: 'de',
       language_url: '/tinymce/langs/de.js',
       plugins: [
-    'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
-    'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
-    'insertdatetime', 'media', 'table', 'help', 'wordcount'
-  ],
-  toolbar: 'undo redo | blocks | ' +
-  'bold italic backcolor | alignleft aligncenter ' +
-  'alignright alignjustify | bullist numlist outdent indent | ' +
-  'removeformat | help',
-      
+        'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 'preview',
+        'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
+        'insertdatetime', 'media', 'table', 'help', 'wordcount'
+      ],
+      toolbar: 'undo redo | blocks | image |' +
+        'bold italic backcolor | alignleft aligncenter ' +
+        'alignright alignjustify | bullist numlist outdent indent | ' +
+        'removeformat | help',
+
       menubar: false,
       branding: false,
       height: 400,
@@ -32,56 +34,54 @@
           editor.save();
         });
       },
+      
+      automatic_uploads: true,
+      paste_data_images: true,
 
-      automatic_uploads: false,
-      images_upload_handler: function (blobInfo, success, failure) {
-        // Bild als Blob lesen
-        const reader = new FileReader();
-        reader.readAsDataURL(blobInfo.blob());
-        reader.onload = function () {
-          const img = new Image();
-          img.src = reader.result;
-          img.onload = function () {
-            // Neues Canvas erzeugen
-            const canvas = document.createElement('canvas');
-            const maxSize = 240; // Maximal 240x240 Pixel
-            let width = img.width;
-            let height = img.height;
+      images_upload_handler: function (blobInfo, progress) {
+        return new Promise(function (resolve, reject) {
+          const xhr = new XMLHttpRequest();
+          xhr.withCredentials = false;
+          xhr.open('POST', '/upload?id=' + encodeURIComponent(currentArticleID));
 
-            // Größenanpassung
-            if (width > height) {
-              if (width > maxSize) {
-                height = Math.round(height * (maxSize / width));
-                width = maxSize;
-              }
-            } else {
-              if (height > maxSize) {
-                width = Math.round(width * (maxSize / height));
-                height = maxSize;
-              }
+          xhr.upload.onprogress = function (e) {
+            progress(e.loaded / e.total * 100);
+          };
+
+          xhr.onload = function () {
+            if (xhr.status < 200 || xhr.status >= 300) {
+              reject('HTTP Error: ' + xhr.status);
+              return;
             }
 
-            canvas.width = width;
-            canvas.height = height;
+            let json;
+            try {
+              json = JSON.parse(xhr.responseText);
+            } catch (err) {
+              reject('Invalid JSON: ' + xhr.responseText);
+              return;
+            }
 
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
+            if (!json || typeof json.location !== 'string') {
+              reject('Invalid response structure: ' + xhr.responseText);
+              return;
+            }
 
-            // Bild wieder als Base64 exportieren
-            //const resizedDataUrl = canvas.toDataURL(blobInfo.blob().type);
-            // <<< WICHTIG: Jetzt als JPEG exportieren mit 80% Qualität!
-            const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-
-            success(resizedDataUrl);
+            resolve(json.location);
           };
-          img.onerror = function () {
-            failure('Konnte Bild nicht laden.');
+
+          xhr.onerror = function () {
+            reject('Image upload failed due to a XHR error. Code: ' + xhr.status);
           };
-        };
-        reader.onerror = function () {
-          failure('Konnte Datei nicht lesen.');
-        };
+
+          const formData = new FormData();
+          formData.append('file', blobInfo.blob(), blobInfo.filename());
+          xhr.send(formData);
+        });
       }
+
+
+
     });
   </script>
 </head>
@@ -89,6 +89,8 @@
 <body>
   <h1>Neuen Artikel erstellen</h1>
   <form action="/" method="post">
+    <!-- Versteckte ID -->
+    <input type="hidden" name="id" value="{{.ID}}">
     <input type="text" name="title" placeholder="Titel" required><br><br>
     <textarea name="content" placeholder="Inhalt" rows="10" required></textarea><br><br>
     <button type="submit">Veröffentlichen</button>

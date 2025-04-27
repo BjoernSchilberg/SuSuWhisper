@@ -64,16 +64,24 @@ func loadArticles() {
 
 func createArticleHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
+		newID := generateID() // <<< Neue ID erzeugen
+
 		tmpl, _ := template.ParseFiles("create.html")
-		tmpl.Execute(w, nil)
+		tmpl.Execute(w, struct {
+			ID string
+		}{
+			ID: newID,
+		})
 		return
 	}
 
 	if r.Method == http.MethodPost {
+		id := r.FormValue("id") // <<< ID jetzt aus dem Formular holen!
 		title := r.FormValue("title")
 		content := r.FormValue("content")
+
 		article := Article{
-			ID:        generateID(),
+			ID:        id,
 			Title:     title,
 			Content:   content,
 			CreatedAt: time.Now(),
@@ -86,7 +94,6 @@ func createArticleHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/article?id="+article.ID, http.StatusSeeOther)
 	}
 }
-
 
 func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
@@ -131,14 +138,61 @@ func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, viewArticle)
 }
 
+func uploadHandler(w http.ResponseWriter, r *http.Request) {
+	// Hole die ID aus dem Query-Parameter
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing ID", http.StatusBadRequest)
+		return
+	}
+
+	err := r.ParseMultipartForm(10 << 20) // Max 10MB
+	if err != nil {
+		http.Error(w, "File too large", http.StatusBadRequest)
+		return
+	}
+
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Error retrieving the file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Speicherort: uploads/<ID>/
+	dirPath := "./uploads/" + id
+	os.MkdirAll(dirPath, os.ModePerm)
+
+	filePath := dirPath + "/" + handler.Filename
+	dst, err := os.Create(filePath)
+	if err != nil {
+		http.Error(w, "Unable to create the file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	_, err = dst.ReadFrom(file)
+	if err != nil {
+		http.Error(w, "Unable to save the file", http.StatusInternalServerError)
+		return
+	}
+
+	// Bild-URL für TinyMCE zurückgeben
+	url := "/uploads/" + id + "/" + handler.Filename
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"location":"%s"}`, url)
+}
 
 func main() {
 	loadArticles()
 	http.HandleFunc("/", createArticleHandler)
 	http.HandleFunc("/article", getArticleHandler)
+	http.HandleFunc("/upload", uploadHandler)
 
 	// Statische Dateien wie TinyMCE bereitstellen
 	http.Handle("/tinymce/", http.StripPrefix("/tinymce/", http.FileServer(http.Dir("./tinymce"))))
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 
 	fmt.Println("Server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
