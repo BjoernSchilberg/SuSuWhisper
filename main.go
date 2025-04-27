@@ -87,6 +87,7 @@ func createArticleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+
 func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -110,15 +111,34 @@ func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	// !!! Hier wird der Content als HTML "markiert" !!!
+	type ViewArticle struct {
+		ID        string
+		Title     string
+		Content   template.HTML
+		CreatedAt time.Time
+	}
+
+	viewArticle := ViewArticle{
+		ID:        article.ID,
+		Title:     article.Title,
+		Content:   template.HTML(article.Content),
+		CreatedAt: article.CreatedAt,
+	}
+
 	// Parse the template with the function map
 	tmpl, _ := template.New("article.html").Funcs(funcMap).ParseFiles("article.html")
-	tmpl.Execute(w, article)
+	tmpl.Execute(w, viewArticle)
 }
+
 
 func main() {
 	loadArticles()
 	http.HandleFunc("/", createArticleHandler)
 	http.HandleFunc("/article", getArticleHandler)
+
+	// Statische Dateien wie TinyMCE bereitstellen
+	http.Handle("/tinymce/", http.StripPrefix("/tinymce/", http.FileServer(http.Dir("./tinymce"))))
 
 	fmt.Println("Server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
