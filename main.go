@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"regexp"
+	"sort"
 	"sync"
 	"time"
 )
@@ -24,6 +26,11 @@ var (
 	mutex    = &sync.Mutex{}
 	filePath = "data/articles.json"
 )
+
+// Debugging-Funktion zum Ausgeben der geladenen Artikel
+func printArticlesCount() {
+	fmt.Printf("Anzahl der geladenen Artikel: %d\n", len(articles))
+}
 
 func generateID() string {
 	rand.Seed(time.Now().UnixNano())
@@ -50,16 +57,27 @@ func saveArticles() {
 }
 
 func loadArticles() {
+	// Pfad zur Datei ermitteln
+	log.Println("Versuche Artikel zu laden von:", filePath)
 	file, err := os.Open(filePath)
 	if err != nil {
-		log.Println("Keine gespeicherten Artikel gefunden.")
+		log.Println("Keine gespeicherten Artikel gefunden:", err)
 		return
 	}
 	defer file.Close()
+	
+	// Map zurücksetzen
+	mutex.Lock()
+	articles = make(map[string]Article)
+	mutex.Unlock()
+	
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&articles); err != nil {
 		log.Println("Fehler beim Laden der Artikel:", err)
+		return
 	}
+	
+	printArticlesCount()
 }
 
 func createArticleHandler(w http.ResponseWriter, r *http.Request) {
@@ -184,11 +202,48 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"location":"%s"}`, url)
 }
 
+
+func overviewHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Overview Handler aufgerufen - Artikel in Map:", len(articles))
+
+	mutex.Lock()
+	articleSlice := make([]Article, 0, len(articles))
+	for _, article := range articles {
+		articleSlice = append(articleSlice, article)
+	}
+	mutex.Unlock()
+
+	log.Println("Anzahl der Artikel für die Anzeige:", len(articleSlice))
+
+	sort.Slice(articleSlice, func(i, j int) bool {
+		return articleSlice[i].CreatedAt.After(articleSlice[j].CreatedAt)
+	})
+
+	funcMap := template.FuncMap{
+		"formatDate": func(t time.Time) string {
+			return t.Format("02.01.2006 15:04")
+		},
+		"truncate": func(s string, length int) string {
+			plainText := regexp.MustCompile("<[^>]*>").ReplaceAllString(s, "")
+			if len(plainText) <= length {
+				return plainText
+			}
+			return plainText[:length] + "..."
+		},
+	}
+
+	tmpl := template.Must(template.New("overview.html").Funcs(funcMap).ParseFiles("overview.html"))
+	tmpl.Execute(w, articleSlice)
+}
+
 func main() {
+	// Versuchen, Artikel zu laden
 	loadArticles()
+	
 	http.HandleFunc("/", createArticleHandler)
 	http.HandleFunc("/article", getArticleHandler)
 	http.HandleFunc("/upload", uploadHandler)
+	http.HandleFunc("/overview", overviewHandler)
 
 	// Statische Dateien wie TinyMCE bereitstellen
 	http.Handle("/tinymce/", http.StripPrefix("/tinymce/", http.FileServer(http.Dir("./tinymce"))))

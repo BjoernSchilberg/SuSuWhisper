@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuSuWhisper - Artikelübersicht</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .articles {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .article-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        .article-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .article-title {
+            font-size: 1.2em;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .article-date {
+            color: #666;
+            font-size: 0.8em;
+            margin-bottom: 10px;
+        }
+        .article-preview {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .read-more {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 15px;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .read-more:hover {
+            background-color: #45a049;
+        }
+        .create-new {
+            display: block;
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            text-align: center;
+            margin: 30px auto;
+            width: 200px;
+        }
+        .create-new:hover {
+            background-color: #0b7dda;
+        }
+        .no-articles {
+            text-align: center;
+            color: #666;
+            margin: 50px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>SuSuWhisper Artikelübersicht</h1>
+    
+    <a href="/" class="create-new">Neuen Artikel erstellen</a>
+    
+    {{if eq (len .) 0}}
+        <p class="no-articles">Keine Artikel vorhanden. Erstelle deinen ersten Artikel!</p>
+    {{else}}
+
+        <div class="articles">
+            {{range .}}
+                <div class="article-card">
+                    <h2 class="article-title">{{.Title}}</h2>
+                    <p class="article-date">Erstellt am {{formatDate .CreatedAt}}</p>
+                    <p class="article-preview">{{truncate .Content 150}}</p>
+                    <a href="/article?id={{.ID}}" class="read-more">Weiterlesen</a>
+                </div>
+            {{end}}
+        </div>
+    {{end}}
+</body>
+</html>
