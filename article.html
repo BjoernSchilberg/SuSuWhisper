@@ -3,11 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .date {
+            color: #666;
+            font-size: 0.8em;
+            margin-bottom: 10px;
+        }
+    </style>
     <title>{{.Title}}</title>
 </head>
 <body>
     <h1>{{.Title}}</h1>
-    <p class="date">Published on: {{formatDate .CreatedAt}}</p>
+    <p class="date">Erstellt am: {{formatDate .CreatedAt}}</p>
     <div>{{.Content}}</div>
     <a href="/">Neuen Artikel erstellen</a>
 </body>
