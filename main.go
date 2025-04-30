@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Article struct {
@@ -27,9 +28,8 @@ var (
 	filePath = "data/articles.json"
 )
 
-// Debugging-Funktion zum Ausgeben der geladenen Artikel
 func printArticlesCount() {
-	fmt.Printf("Anzahl der geladenen Artikel: %d\n", len(articles))
+	log.WithField("count", len(articles)).Info("Number of loaded articles")
 }
 
 func generateID() string {
@@ -47,44 +47,51 @@ func saveArticles() {
 	defer mutex.Unlock()
 	file, err := os.Create(filePath)
 	if err != nil {
-		log.Println("Fehler beim Speichern der Artikel:", err)
+		log.WithError(err).Error("Failed to save articles")
 		return
 	}
 	defer file.Close()
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	encoder.Encode(articles)
+	log.Info("Articles saved successfully")
 }
 
 func loadArticles() {
-	// Pfad zur Datei ermitteln
-	log.Println("Versuche Artikel zu laden von:", filePath)
+	log.WithField("filePath", filePath).Info("Attempting to load articles")
 	file, err := os.Open(filePath)
 	if err != nil {
-		log.Println("Keine gespeicherten Artikel gefunden:", err)
+		log.WithError(err).Warn("No saved articles found")
 		return
 	}
 	defer file.Close()
-	
-	// Map zurücksetzen
+
 	mutex.Lock()
 	articles = make(map[string]Article)
 	mutex.Unlock()
-	
+
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&articles); err != nil {
-		log.Println("Fehler beim Laden der Artikel:", err)
+		log.WithError(err).Error("Failed to load articles")
 		return
 	}
-	
+
 	printArticlesCount()
 }
 
 func createArticleHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		newID := generateID() // <<< Neue ID erzeugen
+	logger := LogRequest(r)
 
-		tmpl, _ := template.ParseFiles("create.html")
+	if r.Method == http.MethodGet {
+		newID := generateID()
+		logger.WithField("new_id", newID).Debug("Generated new article ID")
+
+		tmpl, err := template.ParseFiles("create.html")
+		if err != nil {
+			logger.WithError(err).Error("Failed to parse create template")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 		tmpl.Execute(w, struct {
 			ID string
 		}{
@@ -94,16 +101,20 @@ func createArticleHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodPost {
-		id := r.FormValue("id") // <<< ID jetzt aus dem Formular holen!
+		id := r.FormValue("id")
 		title := r.FormValue("title")
-		content := r.FormValue("content")
 
 		article := Article{
 			ID:        id,
 			Title:     title,
-			Content:   content,
+			Content:   r.FormValue("content"),
 			CreatedAt: time.Now(),
 		}
+
+		logger.WithFields(logrus.Fields{
+			"article_id": article.ID,
+			"title":      article.Title,
+		}).Info("Creating new article")
 
 		mutex.Lock()
 		articles[article.ID] = article
@@ -114,8 +125,11 @@ func createArticleHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getArticleHandler(w http.ResponseWriter, r *http.Request) {
+	logger := LogRequest(r)
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
+		logger.Warn("Missing article ID in request")
 		http.Error(w, "Missing ID", http.StatusBadRequest)
 		return
 	}
@@ -125,9 +139,12 @@ func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 	mutex.Unlock()
 
 	if !exists {
+		logger.WithField("article_id", id).Warn("Article not found")
 		http.Error(w, "Article not found", http.StatusNotFound)
 		return
 	}
+
+	logger.WithField("article_id", id).Debug("Retrieving article")
 
 	// Create a template function map with a formatDate function
 	funcMap := template.FuncMap{
@@ -157,33 +174,41 @@ func getArticleHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
-	// Hole die ID aus dem Query-Parameter
+	logger := LogRequest(r)
+
 	id := r.URL.Query().Get("id")
 	if id == "" {
+		logger.Warn("Missing ID in upload request")
 		http.Error(w, "Missing ID", http.StatusBadRequest)
 		return
 	}
 
-	err := r.ParseMultipartForm(10 << 20) // Max 10MB
+	err := r.ParseMultipartForm(10 << 20)
 	if err != nil {
+		logger.WithError(err).Error("Failed to parse multipart form")
 		http.Error(w, "File too large", http.StatusBadRequest)
 		return
 	}
 
 	file, handler, err := r.FormFile("file")
 	if err != nil {
+		logger.WithError(err).Error("Failed to retrieve file")
 		http.Error(w, "Error retrieving the file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	// Speicherort: uploads/<ID>/
 	dirPath := "./uploads/" + id
-	os.MkdirAll(dirPath, os.ModePerm)
+	if err := os.MkdirAll(dirPath, os.ModePerm); err != nil {
+		logger.WithError(err).Error("Failed to create upload directory")
+		http.Error(w, "Unable to create directory", http.StatusInternalServerError)
+		return
+	}
 
 	filePath := dirPath + "/" + handler.Filename
 	dst, err := os.Create(filePath)
 	if err != nil {
+		logger.WithError(err).Error("Failed to create file")
 		http.Error(w, "Unable to create the file", http.StatusInternalServerError)
 		return
 	}
@@ -191,20 +216,25 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, err = dst.ReadFrom(file)
 	if err != nil {
+		logger.WithError(err).Error("Failed to save file")
 		http.Error(w, "Unable to save the file", http.StatusInternalServerError)
 		return
 	}
 
-	// Bild-URL für TinyMCE zurückgeben
+	logger.WithFields(logrus.Fields{
+		"article_id": id,
+		"filename":   handler.Filename,
+	}).Info("File uploaded successfully")
+
 	url := "/uploads/" + id + "/" + handler.Filename
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, `{"location":"%s"}`, url)
 }
 
-
 func overviewHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("Overview Handler aufgerufen - Artikel in Map:", len(articles))
+	logger := LogRequest(r)
+	logger.Debug("Overview handler called")
 
 	mutex.Lock()
 	articleSlice := make([]Article, 0, len(articles))
@@ -213,7 +243,7 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	mutex.Unlock()
 
-	log.Println("Anzahl der Artikel für die Anzeige:", len(articleSlice))
+	logger.WithField("article_count", len(articleSlice)).Debug("Preparing articles for display")
 
 	sort.Slice(articleSlice, func(i, j int) bool {
 		return articleSlice[i].CreatedAt.After(articleSlice[j].CreatedAt)
@@ -237,18 +267,17 @@ func overviewHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Versuchen, Artikel zu laden
+	initLogger()
 	loadArticles()
-	
+
 	http.HandleFunc("/", createArticleHandler)
 	http.HandleFunc("/article", getArticleHandler)
 	http.HandleFunc("/upload", uploadHandler)
 	http.HandleFunc("/overview", overviewHandler)
 
-	// Statische Dateien wie TinyMCE bereitstellen
 	http.Handle("/tinymce/", http.StripPrefix("/tinymce/", http.FileServer(http.Dir("./tinymce"))))
 	http.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads"))))
 
-	fmt.Println("Server running on :8080")
+	log.Info("Server starting on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
