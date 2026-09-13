@@ -1,11 +1,11 @@
 # Verwende ein offizielles Golang-Image als Basis
-FROM golang:1.24-alpine AS build
+FROM golang:1.26-alpine AS build
 
 # Arbeitsverzeichnis im Container
 WORKDIR /app
 
 # Kopiere Go-Module-Dateien
-COPY go.mod ./
+COPY go.mod go.sum ./
 
 # Lade die Go-Module herunter
 RUN go mod download
@@ -37,6 +37,11 @@ RUN mkdir -p data uploads logs && \
 
 # Lege die Volumes für die persistenten Daten fest
 VOLUME ["/app/data", "/app/uploads", "/app/logs"]
+
+# Im Container auf allen Schnittstellen lauschen (Standard ist sonst
+# 127.0.0.1). Nach außen wird der Port in docker-compose.yml nur auf
+# 127.0.0.1 des Hosts veröffentlicht.
+ENV SUSU_ADDR=:8080
 
 # Port, auf dem die Anwendung laufen wird
 EXPOSE 8080
