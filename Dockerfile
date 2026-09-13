@@ -1,5 +1,5 @@
 # Verwende ein offizielles Golang-Image als Basis
-FROM golang:1.24-alpine AS build
+FROM golang:1.26-alpine AS build
 
 # Arbeitsverzeichnis im Container
 WORKDIR /app

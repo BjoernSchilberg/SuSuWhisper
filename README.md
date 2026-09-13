@@ -47,6 +47,9 @@ so keep the rate limit generous there.
 
 ## Tests
 
+Requires Go 1.26; `go.mod` pins the toolchain, so an older local Go
+downloads it automatically.
+
 ```shell
 go test .
 ```
