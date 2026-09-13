@@ -1,0 +1,15 @@
+# /etc/logrotate.d/susuwhisper
+#
+# SuSuWhisper schreibt sein Log selbst nach logs/susuwhisper.log und hält
+# die Datei offen. copytruncate leert sie, ohne den Dienst neu zu starten.
+
+/opt/susuwhisper/logs/*.log {
+	weekly
+	rotate 4
+	compress
+	delaycompress
+	missingok
+	notifempty
+	copytruncate
+	su susuwhisper susuwhisper
+}

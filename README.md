@@ -21,6 +21,14 @@ susuwhisper.example.org {
 ```
 
 
+## VPS with Caddy and systemd
+
+Without Docker, SuSuWhisper can run as a hardened systemd service behind
+Caddy. [deploy/](deploy/) contains the Caddyfile, the systemd unit, a
+logrotate rule and step-by-step instructions in German
+([deploy/INSTALL.md](deploy/INSTALL.md)).
+
+
 ## Configuration
 
 All settings are optional environment variables.
