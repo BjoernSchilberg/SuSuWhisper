@@ -1,0 +1,34 @@
+# /etc/caddy/Caddyfile
+#
+# Caddy holt das HTTPS-Zertifikat für die Domain automatisch bei
+# Let's Encrypt und leitet HTTP auf HTTPS um. Voraussetzung: Der DNS-Eintrag
+# der Domain zeigt auf den VPS und die Ports 80 und 443 sind offen.
+{
+	# Adresse für Hinweise von Let's Encrypt, z. B. zu ablaufenden Zertifikaten.
+	email admin@example.org
+}
+
+susuwhisper.example.org {
+	# Kein access log: So landen keine IP-Adressen von Schülerinnen und
+	# Schülern in Logdateien. Bei Bedarf einen log-Block ergänzen.
+
+	# Größere Anfragen gar nicht erst annehmen. SuSuWhisper selbst erlaubt
+	# 10 MB pro Bild und 1 MB pro Artikel.
+	request_body {
+		max_size 11MB
+	}
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Caddy setzt X-Forwarded-For auf die echte Client-IP und verwirft
+	# gefälschte Werte vom Client. SuSuWhisper nutzt sie für das Rate-Limit
+	# (SUSU_TRUST_PROXY=true in der systemd-Unit).
+	reverse_proxy 127.0.0.1:8080
+}

@@ -1,0 +1,67 @@
+# /etc/systemd/system/susuwhisper.service
+#
+# Erwartetes Verzeichnis /opt/susuwhisper:
+#   susuwhisper, *.html, tinymce/   gehören root, nur lesbar
+#   data/, uploads/, logs/          gehören dem Benutzer susuwhisper
+
+[Unit]
+Description=SuSuWhisper
+Documentation=https://github.com/BjoernSchilberg/SuSuWhisper
+After=network.target
+
+[Service]
+Type=simple
+User=susuwhisper
+Group=susuwhisper
+# SuSuWhisper findet Vorlagen und Daten relativ zum Arbeitsverzeichnis.
+WorkingDirectory=/opt/susuwhisper
+ExecStart=/opt/susuwhisper/susuwhisper
+Restart=on-failure
+RestartSec=5
+
+Environment=SUSU_ADDR=127.0.0.1:8080
+Environment=SUSU_TRUST_PROXY=true
+# Eine ganze Klasse teilt sich meist eine IP-Adresse. Wird es eng,
+# das Limit anheben (Anfragen pro IP und Minute, 0 = aus).
+#Environment=SUSU_RATE_LIMIT=300
+#Environment=SUSU_STORAGE_QUOTA_MB=2048
+
+# --- Abschottung ---
+# Das ganze Dateisystem ist schreibgeschützt, nur diese drei Verzeichnisse
+# nicht. Programm und HTML-Vorlagen kann der Dienst also nicht verändern.
+ProtectSystem=strict
+ReadWritePaths=/opt/susuwhisper/data /opt/susuwhisper/uploads /opt/susuwhisper/logs
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+UMask=0027
+
+# Nur Verbindungen mit localhost (Caddy). Selbst ein übernommener Dienst
+# kann so keine Daten nach außen schicken.
+IPAddressAllow=localhost
+IPAddressDeny=any
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
